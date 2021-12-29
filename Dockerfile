@@ -137,7 +137,6 @@ RUN chmod +x \
     /usr/local/bin/run-notepad
 
 COPY files/supervisord.conf \
-	files/supervisord_debug.conf \
 	/etc/supervisor/
 
 # Die ports dynamisch zu halten hat hier Vorteile. Bei fixen Ports
