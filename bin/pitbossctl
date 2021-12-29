@@ -1,0 +1,94 @@
+#!/bin/bash
+#
+# Wrapper to start and stop container of a PB.
+# 
+
+DOCKER="docker"
+IMAGE="pbserver"
+PATH_TO_CIV4="/home/$USER/Civ4"
+PATH_TO_PBs="/home/$USER/PBs"
+DOMAIN="_https_zulan.net"
+
+
+CMD="$1"
+GAMEID="$2"
+MOD="$3"
+PORT1="$4"
+PORT2="$5"
+PORT3="$6"
+
+# Command to find out container id.
+CONTAINER="$DOCKER ps -q -n 1 --filter name=Civ4_${GAMEID}"
+
+# Note:
+# CONTAINER="$DOCKER ps -q -n 1 --filter 'name=Civ4_${GAMEID}'" 
+# not works because docker parses 'name, not name ?!
+
+
+print_help() {
+	echo -e "$0 {COMMAND} {OPTIONS} with\n\tCOMMAND\tOPTIONS"
+	echo -e "\tcreate\t\"{GAMEID}\" \"{MODNAME}\" {PB_SERVER_PORT} {PB_WWW_PORT} {PB_SHELL_PORT}"
+	echo -e "\t\t Initialization for first run. Creates docker container named \"Civ4_{GAMEID}\"\n"
+	echo -e "\tdelete\t\"{GAMEID} [force]\" "
+	echo -e "\t\t Removes docker container named \"Civ4_{GAMEID}\"\n"
+	echo -e "\tstart\t\"{GAMEID}\" "
+	echo -e "\tstop\t\"{GAMEID}\" "
+	echo -e "\tshell\t\"{GAMEID}\" "
+	echo -e "\t\t Open shell in running instance\"\n"
+	echo -e "\tattach\t\"{GAMEID}\" "
+	echo -e "\t\t Attaching to container\"\n"
+	echo -e "\tid\t\"{GAMEID}\" "
+	echo -e "\t\t Show container id\"\n"
+	echo -e "\tscreenshot \"{GAMEID}\" "
+	echo -e "\t\t Creates and show (if feh is installed) screenshot of framebuffer."
+}
+
+
+if [ "$CMD" = "-h" -o "$CMD" = "--help" -o "$CMD" = "help" ] ; then
+	echo -e "Usage:\n\n"
+	print_help
+	exit 0
+
+elif [ "$CMD" = "create" ] ; then
+	#sudo $DOCKER run --name "Civ4_$GAMEID" \
+	sudo $DOCKER create --name "Civ4_$GAMEID" \
+		-e GAMEID="$GAMEID" \
+		-e MOD="$MOD" \
+		-e DOMAIN="$DOMAIN" \
+		-e WINEDEBUG=fixme-all \
+		-v "$PATH_TO_CIV4:/app/Civ4" \
+		-v "$PATH_TO_PBs:/home/civpb/PBs" \
+		-p "$PORT1:$PORT1"   -p "$PORT2:$PORT2"   -p "$PORT3:$PORT3" \
+	  "${IMAGE}" \
+		&& echo "Civ4_$GAMEID created"
+
+elif [ "$CMD" = "delete" ] ; then
+	if [ ! "$2" = "1" -o ! "$2" = "force" ] ; then
+		echo -e "This will delete the docker container 'Civ4_${GAMEID}'.\n" \
+			"Are you sure? y/n"
+		read FOO
+	fi
+	sudo $DOCKER container rm "Civ4_${GAMEID}"
+
+elif [ "$CMD" = "start" ] ; then 
+	sudo $DOCKER container start $(sudo $CONTAINER)
+
+elif [ "$CMD" = "stop" ] ; then 
+	sudo $DOCKER container stop $(sudo $CONTAINER)
+
+elif [ "$CMD" = "screenshot" ] ; then 
+	sudo $DOCKER exec -t -u civpb $(sudo $CONTAINER) /usr/local/bin/confirm-popup
+	sudo $DOCKER cp -L "$(sudo $CONTAINER):/tmp/popup_${GAMEID}.png" "/tmp/popup_${GAMEID}.png" \
+		&& sudo chown $USER:$USER "/tmp/popup_${GAMEID}.png"  \
+		&& ( which feh && feh "/tmp/popup_${GAMEID}.png" || true)
+
+elif [ "$CMD" = "id" ] ; then 
+	echo $(sudo $CONTAINER)
+
+elif [ "$CMD" = "stop" ] ; then 
+	sudo $DOCKER attach $(sudo $CONTAINER)
+
+else
+	echo "Command '$CMD' not defined. Allowed commands:"
+	print_help
+fi

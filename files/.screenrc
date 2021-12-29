@@ -1,0 +1,24 @@
+startup_message off
+vbell off
+
+#Zeige letzen Ausgaben vor dem Starten von Vim
+altscreen
+
+backtick 1 5 5 true
+termcapinfo rxvt* 'hs:ts=\E]2;:fs=\007:ds=\E]2;\007'
+caption always
+
+hardstatus alwayslastline "%{= kW}User: %u Machine: %H  | %{= .c}%D %d.%m.%Y %c "
+caption string "%{= kw}%-Lw%{= kG}%{+b}[%n %t]%{-b}%{= kw}%+Lw%1`"
+
+#aktiviere multiuser (-x für unterschiedliche accounts)
+#multiuser on
+
+#definiere maximal gespeicherte Zeilen
+defscrollback 300000
+
+# Nutze X-Scrolbuffer (buggy)
+#termcapinfo xterm* ti@:te@
+term rxvt-unicode
+terminfo rxvt-unicode 'Co#256:AB=\E[48;5;%dm:AF=\E[38;5;%dm'
+

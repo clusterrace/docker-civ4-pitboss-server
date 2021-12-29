@@ -1,0 +1,8 @@
+#!/bin/bash
+
+# Start fake X
+export DISPLAY=:0
+/usr/bin/Xvfb -ac -fbdir /tmp  -screen 0 640x480x24 $DISPLAY &
+
+WINEPREFIX=/app wine "notepad.exe"
+
