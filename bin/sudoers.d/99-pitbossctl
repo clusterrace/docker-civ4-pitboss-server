@@ -1,0 +1,11 @@
+# Template for /etc/sudoers.d
+# Replace »YOUR USERNAME« with the desired user name.
+
+Cmnd_Alias PITBOSSCTL = /usr/local/bin/pitbossctl
+»YOUR USERNAME« ALL = (root) NOPASSWD: PITBOSSCTL
+
+Defaults!PITBOSSCTL env_keep+=DOCKER
+Defaults!PITBOSSCTL env_keep+=IMAGE
+Defaults!PITBOSSCTL env_keep+=PATH_TO_CIV4
+Defaults!PITBOSSCTL env_keep+=PATH_TO_PBs
+Defaults!PITBOSSCTL env_keep+=DOMAIN

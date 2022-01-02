@@ -10,12 +10,12 @@
 # Installation: 
 #       1. Set RUN_WITH_SUDO on 1
 #       2. Copy this file to /usr/local/bin/pitbossctl
-#       3. Add your username to ./sudoers.d/pitbossctl and copy file
+#       3. Add your username to ./sudoers.d/99-pitbossctl and copy file
 #           to /etc/sudoers.d/
 #
-#          (And change access on sudoers-File file to 0440.)
+#          (And change access on sudoers.d/99-pitbossctl file to 0440.)
 #
-RUN_WITH_SUDO=1
+RUN_WITH_SUDO=0
 
 if [ "$RUN_WITH_SUDO" = "1" ] ; then
 	if [ ! $USER = "root" ] ; then
@@ -71,6 +71,10 @@ print_help() {
 	echo -e "\t\t Attaching to container\"\n"
 	echo -e "\tid\t\"{GAMEID}\" "
 	echo -e "\t\t Show container id\"\n"
+	echo -e "\tports\t\"{GAMEID}\" "
+	echo -e "\t\t List port mapping of game \"\n"
+	echo -e "\tkill\t\"{GAMEID}\" "
+	echo -e "\t\t Kills wine process, forcing restart.\"\n"
 	echo -e "\tscreenshot \"{GAMEID}\" "
 	echo -e "\t\t Creates and show (if feh is installed) screenshot of framebuffer."
 }
@@ -97,7 +101,9 @@ if [ -z "$GAMEID" ] ; then
 fi
 
 if [ "$CMD" = "create" ] ; then
-	#$DOCKER run --name "Civ4_$GAMEID" \
+	# Shell on PORT3 is restricted on localhost.
+	# Without this restriction it would be exposed to the whole
+	# internet even if the value in pbSettings.json is correct!
 	$DOCKER create --name "Civ4_$GAMEID" \
 		-e GAMEID="$GAMEID" \
 		-e MOD_NAME="$MOD_NAME" \
@@ -106,9 +112,10 @@ if [ "$CMD" = "create" ] ; then
 		-e NEW_UID="$(id -u $USER)" -e NEW_GID="$(id -g $USER)" \
 		-v "$PATH_TO_CIV4:/app/Civ4" \
 		-v "$PATH_TO_PBs:/altroot/PBs" \
-		-p "$PORT1:$PORT1"   -p "$PORT2:$PORT2"   -p "$PORT3:$PORT3" \
+		-p "$PORT1:$PORT1"   -p "$PORT2:$PORT2"  \
+		-p "127.0.0.1:$PORT3:$PORT3" \
 	  "${IMAGE}" \
-		&& echo "Civ4_$GAMEID created"
+		&& echo "Civ4_$GAMEID created. Use '$0 start $GAMEID' for startup."
 
 elif [ "$CMD" = "delete" ] ; then
 	if [ ! "$3" = "--force" ] ; then
@@ -156,6 +163,13 @@ elif [ "$CMD" = "id" ] ; then
 
 elif [ "$CMD" = "attach" ] ; then
 	$DOCKER attach "$($CONTAINER)"
+
+elif [ "$CMD" = "ports" ] ; then
+	$DOCKER container port "$($CONTAINER)"
+
+elif [ "$CMD" = "kill" ] ; then
+	$DOCKER exec -t -u civpb $($CONTAINER) \
+		/bin/bash -c "kill \"\$(pgrep Civ4BeyondSword)\""
 
 else
 	echo "Command '$CMD' not defined. Allowed commands:"
