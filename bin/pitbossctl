@@ -3,16 +3,45 @@
 # Wrapper to start and stop container of a PB.
 # 
 
-DOCKER="docker"
-IMAGE="pbserver"
-PATH_TO_CIV4="/home/$USER/Civ4"
-PATH_TO_PBs="/home/$USER/PBs"
-DOMAIN="_https_zulan.net"
+# Variant to run this script as root. Useful if docker group
+# doesn't contain this user, but this script can be called
+# without root password.
+#
+# Installation: 
+#       1. Set RUN_WITH_SUDO on 1
+#       2. Copy this file to /usr/local/bin/pitbossctl
+#       3. Add your username to ./sudoers.d/pitbossctl and copy file
+#           to /etc/sudoers.d/
+#
+#          (And change access on sudoers-File file to 0440.)
+#
+RUN_WITH_SUDO=1
+
+if [ "$RUN_WITH_SUDO" = "1" ] ; then
+	if [ ! $USER = "root" ] ; then
+		# This often fails due security policy
+		# sudo --preserve-env=DOCKER,IMAGE,PATH_TO_CIV4,PATH_TO_CIV4,DOMAIN $0 "$@"
+
+		# Handle ENV vars over above sudoers-file
+		sudo $0 "$@"
+
+		exit $?
+	fi
+	# Reset USER variable.
+	USER=$SUDO_USER
+fi
+
+
+DOCKER="${DOCKER:-sudo docker}"
+IMAGE="${IMAGE:-pbserver}"
+PATH_TO_CIV4="${PATH_TO_CIV4:-/home/$USER/Civ4}"
+PATH_TO_PBs="${PATH_TO_PBs:-/home/$USER/PBs}"
+DOMAIN="${DOMAIN:-_https_pb.zulan.net}"
 
 
 CMD="$1"
 GAMEID="$2"
-MOD="$3"
+MOD_NAME="$3"
 PORT1="$4"
 PORT2="$5"
 PORT3="$6"
@@ -27,11 +56,14 @@ CONTAINER="$DOCKER ps -q -n 1 --filter name=Civ4_${GAMEID}"
 
 print_help() {
 	echo -e "$0 {COMMAND} {OPTIONS} with\n\tCOMMAND\tOPTIONS"
-	echo -e "\tcreate\t\"{GAMEID}\" \"{MODNAME}\" {PB_SERVER_PORT} {PB_WWW_PORT} {PB_SHELL_PORT}"
+	echo -e "\tcreate\t\"{GAMEID}\" \"{MOD_NAME}\" {PB_SERVER_PORT} {PB_WWW_PORT} {PB_SHELL_PORT}"
 	echo -e "\t\t Initialization for first run. Creates docker container named \"Civ4_{GAMEID}\"\n"
-	echo -e "\tdelete\t\"{GAMEID} [force]\" "
+	echo -e "\tdelete\t\"{GAMEID} [--force]\" "
 	echo -e "\t\t Removes docker container named \"Civ4_{GAMEID}\"\n"
-	echo -e "\tstart\t\"{GAMEID}\" "
+	echo -e "\tlist [-a]"
+	echo -e "\t\t lists GAMEID for docker container named \"Civ4_*\"\n"
+	echo -e "\t\t Without -a only running instances will be listed.\n"
+	echo -e "\tstart\t\"{GAMEID}\" \"[MOD_NAME}\" "
 	echo -e "\tstop\t\"{GAMEID}\" "
 	echo -e "\tshell\t\"{GAMEID}\" "
 	echo -e "\t\t Open shell in running instance\"\n"
@@ -44,49 +76,86 @@ print_help() {
 }
 
 
-if [ "$CMD" = "-h" -o "$CMD" = "--help" -o "$CMD" = "help" ] ; then
-	echo -e "Usage:\n\n"
+if [ -z "$CMD" -o "$CMD" = "-h" -o "$CMD" = "--help" -o "$CMD" = "help" ] ; then
+	echo "Usage:"
 	print_help
 	exit 0
+fi
 
-elif [ "$CMD" = "create" ] ; then
-	#sudo $DOCKER run --name "Civ4_$GAMEID" \
-	sudo $DOCKER create --name "Civ4_$GAMEID" \
+if [ "$CMD" = "list" ] ; then
+	if [ "$2" == "-a" ] ; then
+		ALL_FLAG="-a"
+	fi
+	$DOCKER ps $ALL_FLAG --filter="name=Civ4_" | sed -n  "s/.*Civ4_\([^ ]*\).*/\1/p"
+	exit 0
+fi
+
+# All other commands require GAMEID
+if [ -z "$GAMEID" ] ; then
+	echo "No game id given"
+	exit -1
+fi
+
+if [ "$CMD" = "create" ] ; then
+	#$DOCKER run --name "Civ4_$GAMEID" \
+	$DOCKER create --name "Civ4_$GAMEID" \
 		-e GAMEID="$GAMEID" \
-		-e MOD="$MOD" \
+		-e MOD_NAME="$MOD_NAME" \
 		-e DOMAIN="$DOMAIN" \
 		-e WINEDEBUG=fixme-all \
+		-e NEW_UID="$(id -u $USER)" -e NEW_GID="$(id -g $USER)" \
 		-v "$PATH_TO_CIV4:/app/Civ4" \
-		-v "$PATH_TO_PBs:/home/civpb/PBs" \
+		-v "$PATH_TO_PBs:/altroot/PBs" \
 		-p "$PORT1:$PORT1"   -p "$PORT2:$PORT2"   -p "$PORT3:$PORT3" \
 	  "${IMAGE}" \
 		&& echo "Civ4_$GAMEID created"
 
 elif [ "$CMD" = "delete" ] ; then
-	if [ ! "$2" = "1" -o ! "$2" = "force" ] ; then
+	if [ ! "$3" = "--force" ] ; then
 		echo -e "This will delete the docker container 'Civ4_${GAMEID}'.\n" \
 			"Are you sure? y/n"
-		read FOO
+		read DELETE_CONTAINER
+		if [ "$DELETE_CONTAINER" != "y" ] ; then
+			exit -1
+		fi
 	fi
-	sudo $DOCKER container rm "Civ4_${GAMEID}"
+	$DOCKER container rm "Civ4_${GAMEID}"
 
-elif [ "$CMD" = "start" ] ; then 
-	sudo $DOCKER container start $(sudo $CONTAINER)
+elif [ "$CMD" = "start" ] ; then
+	if [ -n "$MOD_NAME" ] ; then
+		echo "TODO: Changing the mod name after creation is currently not supported"
+		echo "'docker start' does not allow to provide new environment variables..."
+	fi
+	$DOCKER container start "$($CONTAINER)"
 
-elif [ "$CMD" = "stop" ] ; then 
-	sudo $DOCKER container stop $(sudo $CONTAINER)
+elif [ "$CMD" = "debug" ] ; then
+	$DOCKER container start -ai "$($CONTAINER)"
 
-elif [ "$CMD" = "screenshot" ] ; then 
-	sudo $DOCKER exec -t -u civpb $(sudo $CONTAINER) /usr/local/bin/confirm-popup
-	sudo $DOCKER cp -L "$(sudo $CONTAINER):/tmp/popup_${GAMEID}.png" "/tmp/popup_${GAMEID}.png" \
-		&& sudo chown $USER:$USER "/tmp/popup_${GAMEID}.png"  \
-		&& ( which feh && feh "/tmp/popup_${GAMEID}.png" || true)
+elif [ "$CMD" = "stop" ] ; then
+	$DOCKER container stop "$($CONTAINER)"
 
-elif [ "$CMD" = "id" ] ; then 
-	echo $(sudo $CONTAINER)
+elif [ "$CMD" = "shell" ] ; then
+	$DOCKER exec -it "$($CONTAINER)" /bin/bash
 
-elif [ "$CMD" = "stop" ] ; then 
-	sudo $DOCKER attach $(sudo $CONTAINER)
+elif [ "$CMD" = "screenshot" ] ; then
+	$DOCKER exec -t -u civpb $($CONTAINER) /usr/local/bin/make-screenshot
+	$DOCKER cp -L "$($CONTAINER):/tmp/popup_${GAMEID}.png" - \
+		> "/tmp/popup_${GAMEID}.png"  # Piping may change file ownership
+
+	if [ $? -eq 0 -a -n "$(which feh 2>/dev/null)" ] ; then
+			if [ -n "$SUDO_USER" ] ; then
+				sudo chown $SUDO_USER:$SUDO_USER "/tmp/popup_${GAMEID}.png"
+				su $SUDO_USER feh "/tmp/popup_${GAMEID}.png"
+			else
+				feh "/tmp/popup_${GAMEID}.png"
+			fi
+		fi
+
+elif [ "$CMD" = "id" ] ; then
+	echo "$($CONTAINER)"
+
+elif [ "$CMD" = "attach" ] ; then
+	$DOCKER attach "$($CONTAINER)"
 
 else
 	echo "Command '$CMD' not defined. Allowed commands:"

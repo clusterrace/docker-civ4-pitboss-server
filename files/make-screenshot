@@ -1,0 +1,63 @@
+#!/bin/bash
+#
+
+screenshot() {
+        if [ -z "$1" ] ; then
+            # Note: Placing it in /dev/shm would prevent 'docker cp' from copy
+            IMG_NAME="/tmp/popup_${PB}.${RANDOM}.png"
+            FIXED_NAME="/tmp/popup_${PB}.png"
+
+            xwd -display "$PB_DISPLAY" -root | \
+                convert xwd:- "$IMG_NAME"
+
+            test -L "$FIXED_NAME" && rm "$FIXED_NAME"
+            ln -s "$IMG_NAME" "$FIXED_NAME" 
+        else
+            IMG_NAME="$1.png"
+            xwd -display "$PB_DISPLAY" -root | \
+                convert xwd:- "$IMG_NAME"
+        fi
+        echo "'$IMG_NAME' saved" 
+}
+
+
+if [ "$1" = "-h" -o "$1" = "--help" ] ; 
+then
+    echo "
+    Detects xvfb-display of Pitboss game and creates screenshot
+        of framebuffer.
+        If no argument is given, the image will be stored as
+        /tmp/popup_${GAMEID}.\${RANDOM}.png.
+
+        The latest screenshot is also available as 
+    /tmp/popup_${GAMEIDPB}.png
+
+    Usage: $0 "
+else
+    # Non-docker variant
+    # PB="${1:-PB1}"
+    # XVFB_MCOOKIE="/tmp/${PB}"
+
+    # Docker variant
+    PB="${GAMEID:-PB1}"
+    XVFB_MCOOKIE="/tmp/Xvfb_screen0.auth"
+
+    test -f "$XVFB_MCOOKIE" || \
+        echo "X11 cookie file '${XVFB_MCOOKIE}' not found!"
+
+    # Find display for this game.
+    # Here, in the docker variant this is too complicated.. it's always :0.
+    PB_DISPLAY=$(xauth -n -f "$XVFB_MCOOKIE" list)
+    PB_DISPLAY="${PB_DISPLAY%% *}"
+    PB_DISPLAY=${PB_DISPLAY:=:0} #Optional, use :0 as default value
+    PB_DISPLAY=":${PB_DISPLAY##*:}"
+
+    if [ -n "${PB_DISPLAY}" ]; 
+    then
+        screenshot
+    else
+        echo "Unable to detect DISPLAY variable."
+    fi
+
+fi
+

@@ -1,74 +1,61 @@
 #!/bin/bash
 #
 
-screenshot() {
-		# Debug: Made screenshot to check if detection was right
-		# Note: Placing it in /dev/shm would prevent 'docker cp' from copy
-		IMG_NAME="/tmp/popup_${PB}.${RANDOM}.png"
-		FIXED_NAME="/tmp/popup_${PB}.png"
-
-		xwd -display "$PB_DISPLAY" -root | \
-			convert xwd:- "$IMG_NAME"
-
-		test -f "$FIXED_NAME" && rm "$FIXED_NAME"
-		ln -s "$IMG_NAME" "$FIXED_NAME" 
-}
-
 click_on_popup() {
-	# Title of popup was received by
-	# DISPLAY="$PB_DISPLAY" xwininfo -children -root
-	PB_POPUP_TITLE="Save Error"
+    # Title of popup was received by
+    # DISPLAY="$PB_DISPLAY" xwininfo -children -root
+    PB_POPUP_TITLE="Save Error"
 
-	DISPLAY="$PB_DISPLAY" xdotool \
-		search --onlyvisible --name "${PB_POPUP_TITLE}" \
-		key --window %1 Return
+    DISPLAY="$PB_DISPLAY" xdotool \
+        search --onlyvisible --name "${PB_POPUP_TITLE}" \
+        key --window %1 Return
 }
 
 if [ "$1" = "-h" -o "$1" = "--help" ] ; 
 then
-	echo "
-	Detects xvfb-display of Pitboss game and sends 'Return' keystroke
-	to active window of this framebuffer. This should be used to
-	close popups of 'save errors'.
+    echo "
+    Detects xvfb-display of Pitboss game and sends 'Return' keystroke
+    to active window of this framebuffer. This should be used to
+    close popups of 'save errors'.
 
-	Requires xdotool.
+    Requires xdotool.
 
-	Security note: Use 'auth merge [Magic cookie file]' to allow
-	  'xdotool' the usage of the framebuffer?!
-		The current version of run-pb-server already contains this line.
-		The cookie should be stored as '/tmp/Xvfb_screen0'.
+    Security note: Use 'auth merge [Magic cookie file]' to allow
+      'xdotool' the usage of the framebuffer?!
+        The current version of run-pb-server already contains this line.
+        The cookie should be stored as '/tmp/Xvfb_screen0'.
 
-	Usage: $0 "
+    Usage: $0 "
 else
-	# Non-docker variant
-	# PB="${1:-PB1}"
-	# XVFB_MCOOKIE="/tmp/${PB}"
+    # Non-docker variant
+    # PB="${1:-PB1}"
+    # XVFB_MCOOKIE="/tmp/${PB}"
 
-	# Docker variant
-	PB="${GAMEID:-PB1}"
-	XVFB_MCOOKIE="/tmp/Xvfb_screen0.auth"
+    # Docker variant
+    PB="${GAMEID:-PB1}"
+    XVFB_MCOOKIE="/tmp/Xvfb_screen0.auth"
 
-	test -f "$XVFB_MCOOKIE" || \
-		echo "X11 cookie file '${XVFB_MCOOKIE}' not found!"
+    test -f "$XVFB_MCOOKIE" || \
+        echo "X11 cookie file '${XVFB_MCOOKIE}' not found!"
 
-	# Find display for this game.
-	# Here, in the docker variant this is too complicated.. it's always :0.
-	PB_DISPLAY=$(xauth -n -f "$XVFB_MCOOKIE" list)
-	PB_DISPLAY="${PB_DISPLAY%% *}"
-	PB_DISPLAY=${PB_DISPLAY:=:0} #Optional, use :0 as default value
-	PB_DISPLAY=":${PB_DISPLAY##*:}"
+    # Find display for this game.
+    # Here, in the docker variant this is too complicated.. it's always :0.
+    PB_DISPLAY=$(xauth -n -f "$XVFB_MCOOKIE" list)
+    PB_DISPLAY="${PB_DISPLAY%% *}"
+    PB_DISPLAY=${PB_DISPLAY:=:0} #Optional, use :0 as default value
+    PB_DISPLAY=":${PB_DISPLAY##*:}"
 
-	echo -e "GAME: '$PB'\nPB_DISPLAY: '${PB_DISPLAY}'"
+    echo -e "GAME: '$PB'\nPB_DISPLAY: '${PB_DISPLAY}'"
 
-	if [ -n "${PB_DISPLAY}" ]; 
-	then
-		# Save current state for debugging
-		screenshot
+    if [ -n "${PB_DISPLAY}" ]; 
+    then
+        # Save current state for debugging
+        /usr/local/bin/make-screenshot
 
-		click_on_popup
-	else
-		echo "Unable to detect DISPLAY variable."
-	fi
+        click_on_popup
+    else
+        echo "Unable to detect DISPLAY variable."
+    fi
 
 fi
 

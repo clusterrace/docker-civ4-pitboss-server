@@ -27,13 +27,13 @@ RUN    apt-get install -y --no-install-recommends \
         supervisor \
         libgl1-mesa-glx:i386 \
         winehq-stable \
-# winetricks not required	because we install msxml3.msi manually
+# winetricks not required because we install msxml3.msi manually
 #        winetricks \
 # for run-pb-server \
         xvfb \
 # for confirm-popup.sh x11-apps for xwd, x11-utils for xwininfo,  \
         x11-apps \
-				x11-utils xdotool imagemagick \
+        x11-utils xdotool imagemagick \
         screen \
 # for unbuffer. Otherwise 'docker run' do not show whole output \
         expect tcl \
@@ -125,7 +125,9 @@ COPY files/.screenrc /home/${USER}/.
 
 USER root
 COPY files/run-pb-server \
-	files/confirm-popup \
+  files/confirm-popup \
+  files/make-screenshot \
+  files/fix-ids-in-container \
   files/run-gnu-screen \
   files/run-notepad \
   /usr/local/bin/
@@ -133,11 +135,18 @@ COPY files/run-pb-server \
 RUN chmod +x \
     /usr/local/bin/run-pb-server \
     /usr/local/bin/confirm-popup \
+    /usr/local/bin/make-screenshot \
+    /usr/local/bin/fix-ids-in-container \
     /usr/local/bin/run-gnu-screen \
     /usr/local/bin/run-notepad
 
 COPY files/supervisord.conf \
-	/etc/supervisor/
+    /etc/supervisor/
+
+# Parent for "PBs" mount
+RUN mkdir /altroot \
+    && chown civpb:civpb /altroot \
+    && true
 
 # Die ports dynamisch zu halten hat hier Vorteile. Bei fixen Ports
 # kann man inner- und außerhalb des Containers nicht die gleichen 
