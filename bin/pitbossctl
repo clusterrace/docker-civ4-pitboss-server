@@ -42,9 +42,9 @@ DOMAIN="${DOMAIN:-_https_pb.zulan.net}"
 CMD="$1"
 GAMEID="$2"
 MOD_NAME="$3"
-PORT1="$4"
-PORT2="$5"
-PORT3="$6"
+PORT1="$4"  # Game, UDP
+PORT2="$5"  # WWW
+PORT3="$6"  # SHELL
 
 # Command to find out container id.
 CONTAINER="$DOCKER ps -q -n 1 --filter name=Civ4_${GAMEID}"
@@ -63,7 +63,7 @@ print_help() {
 	echo -e "\tlist [-a]"
 	echo -e "\t\t lists GAMEID for docker container named \"Civ4_*\"\n"
 	echo -e "\t\t Without -a only running instances will be listed.\n"
-	echo -e "\tstart\t\"{GAMEID}\" \"[MOD_NAME}\" "
+	echo -e "\tstart\t\"{GAMEID}\" \"[MOD_NAME]\" "
 	echo -e "\tstop\t\"{GAMEID}\" "
 	echo -e "\tshell\t\"{GAMEID}\" "
 	echo -e "\t\t Open shell in running instance\"\n"
@@ -112,7 +112,8 @@ if [ "$CMD" = "create" ] ; then
 		-e NEW_UID="$(id -u $USER)" -e NEW_GID="$(id -g $USER)" \
 		-v "$PATH_TO_CIV4:/app/Civ4" \
 		-v "$PATH_TO_PBs:/altroot/PBs" \
-		-p "$PORT1:$PORT1"   -p "$PORT2:$PORT2"  \
+		-p "$PORT1:$PORT1/udp" \
+		-p "$PORT2:$PORT2"  \
 		-p "127.0.0.1:$PORT3:$PORT3" \
 	  "${IMAGE}" \
 		&& echo "Civ4_$GAMEID created. Use '$0 start $GAMEID' for startup."
