@@ -5,7 +5,7 @@
 #
 
 GAMEID="${GAMEID:-PB1}"
-MOD="${MOD:-PB Mod_v9}"
+MOD_NAME="${MOD_NAME:-PB Mod_v9}"
 DOMAIN="${DOMAIN:-_http_localhost}"
 
 if [ -n "$NEW_UID" -a "$NEW_UID" != "$(id -u civpb)" ] ; then
@@ -147,7 +147,7 @@ xauth -q -f "/tmp/Xvfb_screen0.auth" "generate" "$DISPLAY" "." "trusted"
 #WINEDLLOVERRIDES=mscoree,mshtml,winemenubuilder.exe=d,gameui,msxml3=d,msxml3r=d \
 unbuffer \
   wine "$CIV4BTS" \
-    mod= "${MOD}"\" \
+    mod= "${MOD_NAME}"\" \
     /ALTROOT="${ALTROOT_WIN}" \
     | grep -v "FTranslator::AddText"
 
