@@ -127,7 +127,7 @@ elif [ "$CMD" = "delete" ] ; then
 			exit -1
 		fi
 	fi
-	$DOCKER container rm "Civ4_${GAMEID}"
+	$DOCKER container rm -f "Civ4_${GAMEID}"
 
 elif [ "$CMD" = "start" ] ; then
 	if [ -n "$MOD_NAME" ] ; then
