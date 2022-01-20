@@ -17,6 +17,12 @@
 #
 RUN_WITH_SUDO=0
 
+# With 1, the PB_WWW_PORT (-> pbspy) and PB_SHELL_PORT (-> pyconsole) will be restritcted
+# on local hosting.
+# Change it it you're not hosting your own instance of pbspy, but want use pb.zulan.net/pbspy.
+RESTRICT_WWW_ON_LOCALHOST=1
+RESTRICT_SHELL_ON_LOCALHOST=1
+
 if [ "$RUN_WITH_SUDO" = "1" ] ; then
 	if [ ! $USER = "root" ] ; then
 		# This often fails due security policy
@@ -42,9 +48,9 @@ DOMAIN="${DOMAIN:-_https_pb.zulan.net}"
 CMD="$1"
 GAMEID="$2"
 MOD_NAME="$3"
-PORT1="$4"  # Game, UDP
-PORT2="$5"  # WWW
-PORT3="$6"  # SHELL
+PORT_CIV4="$4"  # Game, UDP
+PORT_WWW="$5"  # For webinterfaces like pbspy
+PORT_SHELL="$6"  # For pbconsole tool
 
 # Command to find out container id.
 CONTAINER="$DOCKER ps -q -n 1 --filter name=Civ4_${GAMEID}"
@@ -57,26 +63,28 @@ CONTAINER="$DOCKER ps -q -n 1 --filter name=Civ4_${GAMEID}"
 print_help() {
 	echo -e "$0 {COMMAND} {OPTIONS} with\n\tCOMMAND\tOPTIONS"
 	echo -e "\tcreate\t\"{GAMEID}\" \"{MOD_NAME}\" {PB_SERVER_PORT} {PB_WWW_PORT} {PB_SHELL_PORT}"
-	echo -e "\t\t Initialization for first run. Creates docker container named \"Civ4_{GAMEID}\"\n"
+	echo -e "\t\t Initialization for first run. Creates docker container named \"Civ4_{GAMEID}\n"
 	echo -e "\tdelete\t\"{GAMEID} [--force]\" "
 	echo -e "\t\t Removes docker container named \"Civ4_{GAMEID}\"\n"
 	echo -e "\tlist [-a]"
 	echo -e "\t\t lists GAMEID for docker container named \"Civ4_*\"\n"
 	echo -e "\t\t Without -a only running instances will be listed.\n"
-	echo -e "\tstart\t\"{GAMEID}\" \"[MOD_NAME]\" "
+	echo -e "\tstart\t\"{GAMEID}\" "
+	echo -e "\t\t Start container. The MOD_NAME will adapt on selected save if possible.\n"
+	echo -e "\t\t Otherwise the value given by 'create' will be used.\n"
 	echo -e "\tstop\t\"{GAMEID}\" "
 	echo -e "\tshell\t\"{GAMEID}\" "
-	echo -e "\t\t Open shell in running instance\"\n"
+	echo -e "\t\t Open shell in running instance\n"
 	echo -e "\tattach\t\"{GAMEID}\" "
-	echo -e "\t\t Attaching to container\"\n"
+	echo -e "\t\t Attaching to container\n"
 	echo -e "\tid\t\"{GAMEID}\" "
-	echo -e "\t\t Show container id\"\n"
+	echo -e "\t\t Show container id\n"
 	echo -e "\tports\t\"{GAMEID}\" "
-	echo -e "\t\t List port mapping of game \"\n"
+	echo -e "\t\t List port mapping of game\n"
 	echo -e "\tkill\t\"{GAMEID}\" "
-	echo -e "\t\t Kills wine process, forcing restart.\"\n"
+	echo -e "\t\t Kills wine process, forcing restart.\n"
 	echo -e "\tscreenshot \"{GAMEID}\" "
-	echo -e "\t\t Creates and show (if feh is installed) screenshot of framebuffer."
+	echo -e "\t\t Creates and show (if feh is installed) screenshot of framebuffer.\n"
 }
 
 
@@ -101,9 +109,17 @@ if [ -z "$GAMEID" ] ; then
 fi
 
 if [ "$CMD" = "create" ] ; then
-	# Shell on PORT3 is restricted on localhost.
+	# Shell on PORT_SHELL is restricted on localhost.
 	# Without this restriction it would be exposed to the whole
 	# internet even if the value in pbSettings.json is correct!
+
+        if [ "$RESTRICT_WWW_ON_LOCALHOST" = "1" ] ; then
+            HOST_WWW="127.0.0.1:"
+        fi
+        if [ "$RESTRICT_SHELL_ON_LOCALHOST" = "1" ] ; then
+            HOST_SHELL="127.0.0.1:"
+        fi
+
 	$DOCKER create --name "Civ4_$GAMEID" \
 		-e GAMEID="$GAMEID" \
 		-e MOD_NAME="$MOD_NAME" \
@@ -112,9 +128,9 @@ if [ "$CMD" = "create" ] ; then
 		-e NEW_UID="$(id -u $USER)" -e NEW_GID="$(id -g $USER)" \
 		-v "$PATH_TO_CIV4:/app/Civ4" \
 		-v "$PATH_TO_PBs:/altroot/PBs" \
-		-p "$PORT1:$PORT1/udp" \
-		-p "$PORT2:$PORT2"  \
-		-p "127.0.0.1:$PORT3:$PORT3" \
+		-p "$PORT_CIV4:$PORT_CIV4/udp" \
+		-p "${HOST_WWW}$PORT_WWW:$PORT_WWW"  \
+		-p "${HOST_SHELL}$PORT_SHELL:$PORT_SHELL" \
 	  "${IMAGE}" \
 		&& echo "Civ4_$GAMEID created. Use '$0 start $GAMEID' for startup."
 
