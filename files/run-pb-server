@@ -13,7 +13,7 @@ if [ -n "$NEW_UID" -a "$NEW_UID" != "$(id -u civpb)" ] ; then
 
         # Hm, not possible as NON-root! Lets handle it by super
         #/usr/local/bin/fix-ids-in-container "$NEW_UID" "$NEW_GID"
-        sleep 4
+        for I in {1..15} ; do sleep 1; echo -n '.' ; done
 
         # Quit and let process restart by supervisord
         exit 0
@@ -142,6 +142,10 @@ xauth -q -f "/tmp/Xvfb_screen0.auth" "generate" "$DISPLAY" "." "trusted"
 # TODO: Hm, vermutlich kann man das in Docker komplett weglassen, da
 # es hier, ohne ssh, etc, keine Probleme bei den Zugriffsrechten
 # auf das X11-Display gibt?!
+
+
+# Automatic correction of Modname, if name in save game not matching MOD_NAME
+MOD_NAME=$(civ4-extract-modname "$ALTROOT_WITH_DOMAIN" "$MOD_NAME")
 
 
 #WINEDLLOVERRIDES=mscoree,mshtml,winemenubuilder.exe=d,gameui,msxml3=d,msxml3r=d \

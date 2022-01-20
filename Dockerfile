@@ -125,6 +125,7 @@ COPY files/.screenrc /home/${USER}/.
 
 USER root
 COPY files/run-pb-server \
+  files/civ4-extract-modname \
   files/confirm-popup \
   files/make-screenshot \
   files/fix-ids-in-container \
@@ -134,6 +135,7 @@ COPY files/run-pb-server \
 
 RUN chmod +x \
     /usr/local/bin/run-pb-server \
+    /usr/local/bin/civ4-extract-modname \
     /usr/local/bin/confirm-popup \
     /usr/local/bin/make-screenshot \
     /usr/local/bin/fix-ids-in-container \

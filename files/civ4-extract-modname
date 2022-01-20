@@ -1,0 +1,94 @@
+#!/bin/bash
+# Script for Civ4 BTS
+
+show_help() {
+    echo "
+        Extracts mod name of given save.
+
+        Requirements: hexdump
+
+        Usage:
+        $0 \"{Civ4 Save}\"
+              or
+        $0 \"{Altroot Dir with pbSettings.json}\" "[Default mod name]"
+        "
+}
+
+get_pbmod_filename() {
+     # Extracts filename from pbSettings.json
+    
+    ALTROOT="$1"
+
+    if [ ! -e "$ALTROOT/pbSettings.json" ] ; then
+        echo "Folder '$ALTROOT' not contains pbSettings.json" >&2
+        exit -1
+    fi
+
+
+    SAVE_WITHOUT_PATH=$(sed -n -e 's/\s*"filename"\s*:\s*"\([^"]*\)".*/\1/p' "$ALTROOT/pbSettings.json")
+    FOLDER_INDEX=$(sed -n -e 's/\s*"folderIndex"\s*:\s*\([0-9]*\).*/\1/p' "$ALTROOT/pbSettings.json")
+    AUTOSTART=$(sed -n -e 's/\s*"autostart"\s*:\s*\([0-9]*\).*/\1/p' "$ALTROOT/pbSettings.json")
+
+    if [ $AUTOSTART -ne 1 ] ; then
+        echo "WARNING: Autostart-flag in pbSettings is disabled." >&2
+        return -1
+    fi
+
+    if [ "$FOLDER_INDEX" = "-1" ] ; then
+        SAVE="$SAVE_WITHOUT_PATH"
+    else
+        SAVE_SEARCH=$(find "$ALTROOT" -iname "$SAVE_WITHOUT_PATH")
+        if [ ! "1" = $(wc -l <<<"$SAVE_SEARCH") ] ; then
+                echo "WARNING: Found multiple saves with the same name. Continuing with first match" >&2 
+        fi
+        SAVE=$(head -n 1 <<<"$SAVE_SEARCH")
+    fi
+
+    echo "$SAVE"
+}
+
+modname() {
+    HEXDUMPFORMAT='"" 2/1 "%02X" " "'
+    INTFORMAT='"" 2/1 "%d" ""'
+
+# Bestimme Länge des Modnamens im Spielstand
+# O.B.d.A. ist der Modname maximal 256 Zeichen lang. (Es wird nur das niedrigste der vier Bytes gelesen)
+    LENNAME=$(hexdump -e "$INTFORMAT" -s 4 -n 1 "$SAVE")
+
+    STRINGFORMAT='"" '$LENNAME'/1 "%c" ""'
+
+# Lese Modnamen
+#echo hexdump -e \"$STRINGFORMAT\" -s 8 -n \"$LENNAME\" \"$SAVE\"
+    MODNAME=$(hexdump -e "$STRINGFORMAT" -s 8 -n "$LENNAME" "$SAVE")
+
+# Strip prefix 'Mods\' and suffix '\'
+    MODNAME="${MODNAME:5:-1}"
+
+    echo "$MODNAME"
+}
+
+
+if [ "$#" -lt 1 ]; then
+    show_help
+    exit 0
+fi
+
+SAVE_OR_PATH="$1"
+DEFAULT_MOD_NAME="$2"
+
+if [ -d "$SAVE_OR_PATH" ] ; then
+    SAVE=$(get_pbmod_filename "$SAVE_OR_PATH")
+    if [ $? -ne 0 ] ; then
+        echo "$DEFAULT_MOD_NAME"
+        exit 0
+    fi
+else
+    SAVE="$SAVE_OR_PATH"
+fi
+
+if [ ! -e "$SAVE" ] ; then
+    echo "File not found" >&2
+    exit -1
+fi
+
+modname "$SAVE"
