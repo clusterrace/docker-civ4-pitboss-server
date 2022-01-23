@@ -8,35 +8,25 @@ GAMEID="${GAMEID:-PB1}"
 MOD_NAME="${MOD_NAME:-PB Mod_v9}"
 DOMAIN="${DOMAIN:-_http_localhost}"
 
-if [ -n "$NEW_UID" -a "$NEW_UID" != "$(id -u civpb)" ] ; then
-        echo "Adjust user and group id to match with values outside."
 
-        # Hm, not possible as NON-root! Lets handle it by super
-        #/usr/local/bin/fix-ids-in-container "$NEW_UID" "$NEW_GID"
-        for I in {1..15} ; do sleep 1; echo -n '.' ; done
+create_altroot_path_with_domain () {
+  # Forge folder structure which mimics the http(s) path to reach the
+  # save games over http(s). Will be needed to load a save game fast.
+  BASEDIR_WITH_DOMAIN="/altroot/${DOMAIN}/pb"
+  ALTROOT_WITH_DOMAIN="$BASEDIR_WITH_DOMAIN/PBs/${GAMEID}"
+  #       The http server needs to serve the files under pb/PBs/...
+  # TODO: This (static) path generation should be done outside of the image...
 
-        # Quit and let process restart by supervisord
-        exit 0
-fi
+  # Convert paths into Windows/Wine syntax.
+  # ALTROOT_WIN="Z:\\home\\civpb\\${DOMAIN}\\pb\\PBs\\${GAMEID}"
+  ALTROOT_WIN=`echo "Z:${ALTROOT_WITH_DOMAIN}" | sed -e 's/[\/]/\\\\/g' `
 
-
-# Forge folder structure which mimics the http(s) path to reach the
-# save games over http(s). Will be needed to load a save game fast.
-BASEDIR_WITH_DOMAIN="/altroot/${DOMAIN}/pb"
-ALTROOT_WITH_DOMAIN="$BASEDIR_WITH_DOMAIN/PBs/${GAMEID}"
-#       The http server needs to serve the files under pb/PBs/...
-# TODO: This (static) path generation should ne done outside of the image...
-
-# Convert paths into Windows/Wine syntax.
-# ALTROOT_WIN="Z:\\home\\civpb\\${DOMAIN}\\pb\\PBs\\${GAMEID}"
-ALTROOT_WIN=`echo "Z:${ALTROOT_WITH_DOMAIN}" | sed -e 's/[\/]/\\\\/g' `
-
-cd /altroot
-mkdir -p "$BASEDIR_WITH_DOMAIN"
-if [ ! -d "${BASEDIR_WITH_DOMAIN}/PBs" ] ; then
+  cd /altroot
+  mkdir -p "$BASEDIR_WITH_DOMAIN"
+  if [ ! -d "${BASEDIR_WITH_DOMAIN}/PBs" ] ; then
     # ln -s "/home/${USER}/PBs/" "$BASEDIR_WITH_DOMAIN"
     ln -s "/altroot/PBs/" "$BASEDIR_WITH_DOMAIN"
-fi
+  fi
 
 # Note: If you want linking one level below 'PBs', e.g. linking 'PB1',
 # then please also link the 'Python' folder. Otherwise the PB Mod will not load.
@@ -53,110 +43,144 @@ fi
 # ]
 # […]
 #
+}
 
+check_altroot() {
 # Check if proper ALTROOT is given
-if [ ! -f "${ALTROOT_WITH_DOMAIN}/pbSettings.json" ] ; then
+  if [ ! -f "${ALTROOT_WITH_DOMAIN}/pbSettings.json" ] ; then
     echo "pbSettings.json not found in in '$ALTROOT_WITH_DOMAIN'"
-  exit -1
-fi
-if [ ! -f "${ALTROOT_WITH_DOMAIN}/CivilizationIV.ini" ] ; then
+    exit -1
+  fi
+  if [ ! -f "${ALTROOT_WITH_DOMAIN}/CivilizationIV.ini" ] ; then
     echo "CivilizationIV.ini not found in in '$ALTROOT_WITH_DOMAIN'"
-  exit -1
-else
+    exit -1
+  else
     echo "Fix path in the ini file"
     # Backslash fun...
-    ALTROOT_WIN2=`echo "Z:${ALTROOT_WITH_DOMAIN}" | sed -e 's/[\/]/\\\\\\\\/g' `
+    # ALTROOT_WIN2=`echo "Z:${ALTROOT_WITH_DOMAIN}" | sed -e 's/[\/]/\\\\\\\\/g' `
     ALTROOT_WIN2=`echo "Z:${ALTROOT_WITH_DOMAIN}" | sed -e 's/[\/]/\\\\\\\\\\\\\\\\/g' `
     sed -i -e"s/PitbossSMTPLogin=.*/PitbossSMTPLogin=${ALTROOT_WIN2}/" "${ALTROOT_WITH_DOMAIN}/CivilizationIV.ini"
 
     echo "Contain PitbossSMTPLogin now proper path?!"
     grep "PitbossSMTPLogin=" "${ALTROOT_WITH_DOMAIN}/CivilizationIV.ini"
     echo -e "\n\n"
-fi
-if [ ! -d "${ALTROOT_WITH_DOMAIN}/Saves/multi" -a \
+  fi
+  if [ ! -d "${ALTROOT_WITH_DOMAIN}/Saves/multi" -a \
     ! -d "${ALTROOT_WITH_DOMAIN}/Saves/Multi" ] ; then
-    echo "Folder 'Saves/multi' not found in in '$ALTROOT_WITH_DOMAIN'"
-  exit -1
-fi
+      echo "Folder 'Saves/multi' not found in in '$ALTROOT_WITH_DOMAIN'"
+      exit -1
+  fi
+}
 
 
-cd "/app/Civ4/Beyond the Sword"
-if [ -f "Civ4BeyondSword_PitBoss_Zulan2.exe" ] ; then
+find_civ4_binary() {
+  cd "/app/Civ4/Beyond the Sword"
+  if [ -f "Civ4BeyondSword_PitBoss_Zulan2.exe" ] ; then
     CIV4BTS="Civ4BeyondSword_PitBoss_Zulan2.exe"
-elif [ -f "Civ4BeyondSword_PitBoss2014.exe" ] ; then
+  elif [ -f "Civ4BeyondSword_PitBoss2014.exe" ] ; then
     CIV4BTS="Civ4BeyondSword_PitBoss2014.exe"
-else
+  else
     CIV4BTS="Civ4BeyondSword_PitBoss.exe"
-fi
+  fi
+}
+
+start_x () {
+  # Start fake X in first intialization of script.
+  # Skip this step if this script is called on a debug shell.
+
+  if [ -f "/tmp/Xvfb_screen0" ] ; then
+    return
+  fi
+  STOPX=1
+
+  /usr/bin/Xvfb -ac -fbdir /tmp  -screen 0 640x480x24 $DISPLAY &
+
+  sleep 5 
+  ls /tmp
+
+  # Generate auth file for make-screenshot script
+  xauth -q -f "/tmp/Xvfb_screen0.auth" "generate" "$DISPLAY" "." "trusted" 2>/dev/null
+
+  # TODO: Hm, vermutlich kann man das in Docker komplett weglassen, da
+  # es hier, ohne ssh, etc, keine Probleme bei den Zugriffsrechten
+  # auf das X11-Display gibt?!
+}
+
+stop_x () {
+  if [ "$STOPX" = "1" ] ; then
+    kill $(pgrep Xvfb)
+  fi
+}
 
 
 # Avoid permanent reloads of (non-working) server
 # if it restarts too often
 wait_after_n() {
-    NUM_ALLOWED="${1:-10}"
-    WAIT_S="${2:-3600}"
-    RESTART_FILE="/tmp/NUM_RESTARTS"
+  NUM_ALLOWED="${1:-10}"
+  WAIT_S="${2:-3600}"
+  RESTART_FILE="/tmp/NUM_RESTARTS"
 
-    # Create file if required
-    [ -f "$RESTART_FILE" ] || echo "0" > "$RESTART_FILE"
+  # Create file if required
+  [ -f "$RESTART_FILE" ] || echo "0" > "$RESTART_FILE"
 
-    # Check if to many restarts was made
-    NUM_CURRENT=$(cat "$RESTART_FILE")
-    TIME_TOUCH=$(stat -c %Y "$RESTART_FILE")    
-    TIME_NOW=$(date +%s)    
-    if (( $TIME_NOW - $TIME_TOUCH < $WAIT_S && ${NUM_ALLOWED:-1} <= ${NUM_CURRENT:-0} )) ; then
-        echo "Too many restarts in the last $WAIT_S seconds."
-        echo "Idle some time before PBServer starts again..."
-        sleep "$WAIT_S"
-        echo "... continue after waiting"
+  # Check if to many restarts was made
+  NUM_CURRENT=$(cat "$RESTART_FILE")
+  TIME_TOUCH=$(stat -c %Y "$RESTART_FILE")    
+  TIME_NOW=$(date +%s)    
+  if (( $TIME_NOW - $TIME_TOUCH < $WAIT_S && ${NUM_ALLOWED:-1} <= ${NUM_CURRENT:-0} )) ; then
+    echo "Too many restarts in the last $WAIT_S seconds."
+    echo "Idle some time before PBServer starts again..."
+    sleep "$WAIT_S"
+    echo "... continue after waiting"
 
-        echo "0" > "$RESTART_FILE"
+    echo "0" > "$RESTART_FILE"
+  else
+
+    echo "Restart counter: $NUM_CURRENT"
+    if (( $TIME_NOW - $TIME_TOUCH < $WAIT_S )) ; then
+      # Increase number if still in the same time window.
+      let NUM_CURRENT++
     else
-
-        echo "Restart counter: $NUM_CURRENT"
-
-        if (( $TIME_NOW - $TIME_TOUCH < $WAIT_S )) ; then
-            # Increase number if still in the same time window.
-            let NUM_CURRENT++
-        else
-            # Restart with new time window
-            NUM_CURRENT=0
-        fi
-        echo "$NUM_CURRENT" > "$RESTART_FILE"
+      # Restart with new time window
+      NUM_CURRENT=0
     fi
+      echo "$NUM_CURRENT" > "$RESTART_FILE"
+  fi
 }
 
-wait_after_n 10 3600
-# wait_after_n 2 120
+main() {
 
+  wait_after_n 10 3600
+  # wait_after_n 2 120
 
-# Start fake X
-export DISPLAY=:0
-/usr/bin/Xvfb -ac -fbdir /tmp  -screen 0 640x480x24 $DISPLAY &
-
-# Generate X11 authorisation file by hand. This will be used by
-# confirm-popup script.
-# (Other variant would be usage of xvfb-run instead of Xvfb).
-sleep 3
-xauth -q -f "/tmp/Xvfb_screen0.auth" "generate" "$DISPLAY" "." "trusted"
-# TODO: Hm, vermutlich kann man das in Docker komplett weglassen, da
-# es hier, ohne ssh, etc, keine Probleme bei den Zugriffsrechten
-# auf das X11-Display gibt?!
-
-
-# Automatic correction of Modname, if name in save game not matching MOD_NAME
-MOD_NAME=$(civ4-extract-modname "$ALTROOT_WITH_DOMAIN" "$MOD_NAME")
-
+  # Automatic correction of Modname, if name in save game not matching MOD_NAME
+  MOD_NAME=$(civ4-extract-modname "$ALTROOT_WITH_DOMAIN" "$MOD_NAME")
 
 #WINEDLLOVERRIDES=mscoree,mshtml,winemenubuilder.exe=d,gameui,msxml3=d,msxml3r=d \
-unbuffer \
-  wine "$CIV4BTS" \
-    mod= "${MOD_NAME}"\" \
-    /ALTROOT="${ALTROOT_WIN}" \
-    | grep -v "FTranslator::AddText"
+  unbuffer \
+    wine "$CIV4BTS" \
+      mod= "${MOD_NAME}\"" \
+      /ALTROOT="${ALTROOT_WIN}" \
+      | grep -v "FTranslator::AddText"
+
+      # | grep -v "FTranslator::AddText"
 
 # Note: "^FTranslator::AddText" does not match(?!)
+# Node: Tailing \" after mod name without counterpart is required
+
+}
 
 
-# Stop framebuffer for next run
-kill $(pgrep Xvfb)
+export DISPLAY=:0
+
+create_altroot_path_with_domain
+check_altroot
+find_civ4_binary
+start_x
+
+for I in {1..10000} ; do 
+    main
+done
+
+stop_x
+

@@ -15,13 +15,35 @@
 #
 #          (And change access on sudoers.d/99-pitbossctl file to 0440.)
 #
-RUN_WITH_SUDO=0
+RUN_WITH_SUDO=1
 
 # With 1, the PB_WWW_PORT (-> pbspy) and PB_SHELL_PORT (-> pyconsole) will be restritcted
 # on local hosting.
 # Change it it you're not hosting your own instance of pbspy, but want use pb.zulan.net/pbspy.
 RESTRICT_WWW_ON_LOCALHOST=1
 RESTRICT_SHELL_ON_LOCALHOST=1
+
+# Name of used docker image
+IMAGE="${IMAGE:-pbserver}"
+
+# Command to call docker. Depends from your setup.
+DOCKER="${DOCKER:-sudo docker}"
+
+# User with write rights in the Civ4 Pitboss ALTROOT folder.
+DOCKER_USER=civpb
+
+# Positon of Civ and the parent directory of the ALTROOT folder.
+PATH_TO_CIV4="${PATH_TO_CIV4:-/home/$DOCKER_USER/Civ4}"
+PATH_TO_PBs="${PATH_TO_PBs:-/home/$DOCKER_USER/PBs}"
+
+# Target for fast loading of saves over http (optional)
+DOMAIN="${DOMAIN:-_https_pb.zulan.net}"
+
+# Programm to show images with 'pitbossctl screenshot'
+IMAGE_VIEWER="feh"
+
+
+############################################################
 
 if [ "$RUN_WITH_SUDO" = "1" ] ; then
 	if [ ! $USER = "root" ] ; then
@@ -31,6 +53,16 @@ if [ "$RUN_WITH_SUDO" = "1" ] ; then
 		# Handle ENV vars over above sudoers-file
 		sudo $0 "$@"
 
+                # X-forwarding related command needs to be finished 
+                # as normal user... 
+                CMD="$1"
+                GAMEID="$2"
+                if [ "$CMD" = "screenshot" ] ; then
+                    if [ $? -eq 0 -a -n "$(which "$IMAGE_VIEWER" 2>/dev/null)" ] ; then
+                        "$IMAGE_VIEWER" "/tmp/popup_${GAMEID}.png"
+                    fi
+                fi
+
 		exit $?
 	fi
 	# Reset USER variable.
@@ -38,12 +70,7 @@ if [ "$RUN_WITH_SUDO" = "1" ] ; then
 fi
 
 
-DOCKER="${DOCKER:-sudo docker}"
-IMAGE="${IMAGE:-pbserver}"
-PATH_TO_CIV4="${PATH_TO_CIV4:-/home/$USER/Civ4}"
-PATH_TO_PBs="${PATH_TO_PBs:-/home/$USER/PBs}"
-DOMAIN="${DOMAIN:-_https_pb.zulan.net}"
-
+############################################################
 
 CMD="$1"
 GAMEID="$2"
@@ -121,11 +148,11 @@ if [ "$CMD" = "create" ] ; then
         fi
 
 	$DOCKER create --name "Civ4_$GAMEID" \
+                --user "${DOCKER_USER}" \
 		-e GAMEID="$GAMEID" \
 		-e MOD_NAME="$MOD_NAME" \
 		-e DOMAIN="$DOMAIN" \
 		-e WINEDEBUG=fixme-all \
-		-e NEW_UID="$(id -u $USER)" -e NEW_GID="$(id -g $USER)" \
 		-v "$PATH_TO_CIV4:/app/Civ4" \
 		-v "$PATH_TO_PBs:/altroot/PBs" \
 		-p "$PORT_CIV4:$PORT_CIV4/udp" \
@@ -162,16 +189,17 @@ elif [ "$CMD" = "shell" ] ; then
 	$DOCKER exec -it "$($CONTAINER)" /bin/bash
 
 elif [ "$CMD" = "screenshot" ] ; then
-	$DOCKER exec -t -u civpb $($CONTAINER) /usr/local/bin/make-screenshot
-	$DOCKER cp -L "$($CONTAINER):/tmp/popup_${GAMEID}.png" - \
-		> "/tmp/popup_${GAMEID}.png"  # Piping may change file ownership
-
-	if [ $? -eq 0 -a -n "$(which feh 2>/dev/null)" ] ; then
+	$DOCKER exec -t -u "${DOCKER_USER}" "$($CONTAINER)" /usr/local/bin/make-screenshot
+	#$DOCKER cp -L "$($CONTAINER):/tmp/popup_${GAMEID}.png" - \
+	#	> "/tmp/popup_${GAMEID}.png"  # Piping may change file ownership
+        # NOTE: Piping not work! It prepends some text before the PNG!
+	$DOCKER cp -L "$($CONTAINER):/tmp/popup_${GAMEID}.png" "/tmp/popup_${GAMEID}.png"
+	if [ $? -eq 0 -a -n "$(which "$IMAGE_VIEWER" 2>/dev/null)" ] ; then
 			if [ -n "$SUDO_USER" ] ; then
-				sudo chown $SUDO_USER:$SUDO_USER "/tmp/popup_${GAMEID}.png"
-				su $SUDO_USER feh "/tmp/popup_${GAMEID}.png"
+				chown $SUDO_USER:$SUDO_USER "/tmp/popup_${GAMEID}.png"
+				#su $SUDO_USER "$IMAGE_VIEWER" "/tmp/popup_${GAMEID}.png"
 			else
-				feh "/tmp/popup_${GAMEID}.png"
+				"$IMAGE_VIEWER" "/tmp/popup_${GAMEID}.png"
 			fi
 		fi
 
@@ -185,7 +213,7 @@ elif [ "$CMD" = "ports" ] ; then
 	$DOCKER container port "$($CONTAINER)"
 
 elif [ "$CMD" = "kill" ] ; then
-	$DOCKER exec -t -u civpb $($CONTAINER) \
+	$DOCKER exec -t -u "$DOCKER_USER" "$($CONTAINER)" \
 		/bin/bash -c "kill \"\$(pgrep Civ4BeyondSword)\""
 
 else
