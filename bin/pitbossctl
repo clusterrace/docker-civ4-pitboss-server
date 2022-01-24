@@ -108,10 +108,13 @@ print_help() {
 	echo -e "\t\t Show container id\n"
 	echo -e "\tports\t\"{GAMEID}\" "
 	echo -e "\t\t List port mapping of game\n"
+	echo -e "\tfix_ids\t\"{GAMEID}\" [UID] [GID]"
+	echo -e "\t\t Change UID and GID of '$DOCKER_USER' in container.\n"
+	echo -e "\t\t This value should match the user values on the host.\n"
 	echo -e "\tkill\t\"{GAMEID}\" "
 	echo -e "\t\t Kills wine process, forcing restart.\n"
 	echo -e "\tscreenshot \"{GAMEID}\" "
-	echo -e "\t\t Creates and show (if feh is installed) screenshot of framebuffer.\n"
+	echo -e "\t\t Creates and show (if '$IMAGE_VIEWER' is installed) screenshot of framebuffer.\n"
 }
 
 
@@ -180,6 +183,7 @@ elif [ "$CMD" = "start" ] ; then
 	$DOCKER container start "$($CONTAINER)"
 
 elif [ "$CMD" = "debug" ] ; then
+        # start+attach
 	$DOCKER container start -ai "$($CONTAINER)"
 
 elif [ "$CMD" = "stop" ] ; then
@@ -211,6 +215,11 @@ elif [ "$CMD" = "attach" ] ; then
 
 elif [ "$CMD" = "ports" ] ; then
 	$DOCKER container port "$($CONTAINER)"
+
+elif [ "$CMD" = "fix_ids" ] ; then
+        NEW_UID="${3:-$(id -u $DOCKER_USER)}"
+        NEW_GID="${4:-$(id -g $DOCKER_USER)}"
+	$DOCKER exec -t -u root "$($CONTAINER)" /usr/local/bin/fix-ids-in-container  "$NEW_UID" "$NEW_GID"
 
 elif [ "$CMD" = "kill" ] ; then
 	$DOCKER exec -t -u "$DOCKER_USER" "$($CONTAINER)" \

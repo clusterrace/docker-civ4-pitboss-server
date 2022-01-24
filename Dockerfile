@@ -140,6 +140,7 @@ COPY files/run-pb-server \
   files/civ4-extract-modname \
   files/confirm-popup \
   files/make-screenshot \
+  files/fix-ids-in-container \
   files/run-notepad \
   /usr/local/bin/
 
@@ -147,13 +148,14 @@ RUN chmod +x \
     /usr/local/bin/run-pb-server \
     /usr/local/bin/civ4-extract-modname \
     /usr/local/bin/confirm-popup \
+    /usr/local/bin/fix-ids-in-container \
     /usr/local/bin/make-screenshot \
     /usr/local/bin/run-notepad
 
 COPY files/supervisord.conf \
     /etc/supervisor/
 
-# For --user mode give user right to create pid-file
+# For --user mode Give user right to create pid-file
 RUN touch /supervisord.pid \
     && chown $UNAME:root /supervisord.pid \
     && true
@@ -180,5 +182,6 @@ RUN touch /supervisord.pid \
 ENTRYPOINT ["/usr/bin/supervisord"]
 CMD ["-c", "/etc/supervisor/supervisord.conf"]
 
+# supervisor-free variant
 #ENTRYPOINT ["/bin/bash"]
 #CMD ["-c", "/usr/local/bin/run-pb-server"]

@@ -1,0 +1,40 @@
+#!/bin/bash
+
+UNAME=civpb
+
+if [ "$#" -eq 0 ] ; then
+    echo "Changes user/group id of $UNAME" \
+        "" \ 
+        "Call this script from host by 'pitbossctl'" \ 
+        "" \ 
+        "Usage: $0 {NEW user id} [New group id]"
+    exit 0
+fi
+
+OLD_UID=$(id -u "$UNAME")
+OLD_GID=$(id -g "$UNAME")
+NEW_UID=${1:-$OLD_UID}
+NEW_GID=${2:-$OLD_GID}
+
+if [ "$NEW_UID" -ge 1000 -o "$NEW_GID" -ge 1000 ] ; then
+
+   if [ "$NEW_UID" != "$OLD_UID" -o "$NEW_GID" != "$OLD_GID" ] ; then
+   
+       usermod -u "$NEW_UID" "$UNAME"
+       groupmod -g "$NEW_GID" "$UNAME"
+       
+       # Adapt home dir of user
+       chown -P -R "$NEW_UID:$NEW_GID" "/home/$UNAME"
+       
+       # NOT recursive
+       chown "$NEW_UID:$NEW_GID"  /app /altroot /altroot/PBs
+   
+       echo "Changed $UNAME to ${NEW_UID}:${NEW_GID}"
+   else
+       echo "User $UNAME has already this UID and GID"
+   fi
+   
+else
+    echo "Hey, input UID/GID needs to be numbers>=1000."
+    exit -1
+fi
