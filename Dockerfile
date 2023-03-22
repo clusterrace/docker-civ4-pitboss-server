@@ -185,3 +185,9 @@ CMD ["-c", "/etc/supervisor/supervisord.conf"]
 # supervisor-free variant
 #ENTRYPOINT ["/bin/bash"]
 #CMD ["-c", "/usr/local/bin/run-pb-server"]
+
+COPY --chown=1000:1000 Civ4 /app/Civ4
+
+COPY --chown=1000:1000 pbmod/PBs /altroot/PBs
+
+USER civpb-docker
